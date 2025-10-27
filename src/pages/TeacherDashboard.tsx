@@ -322,12 +322,7 @@ const TeacherDashboard = () => {
                         <CardDescription>Notes you have uploaded for students.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                         {isLoadingNotes ? (
-                            <>
-                                <Skeleton className="h-16 w-full rounded-lg" />
-                                <Skeleton className="h-16 w-full rounded-lg" />
-                            </>
-                         ) : notesError ? (
+                         { notesError ? (
                             <div className="text-center text-destructive py-4"><p>⚠️ {notesError}</p></div>
                          ) : notes.length === 0 ? (
                             <div className="text-center text-muted-foreground py-4">

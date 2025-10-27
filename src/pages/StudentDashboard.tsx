@@ -521,7 +521,10 @@ const StudentDashboard = () => {
                                         <p className="text-sm text-muted-foreground">Asked by {getAuthorDisplayName(question.author)}</p>
                                     </div>
                                     <div className="flex items-center gap-2 sm:gap-4 text-sm text-muted-foreground flex-shrink-0">
-                                        <Button size="sm" variant="outline" asChild><Link to={`/questions/${question._id}`}>Answer</Link></Button>
+                                        <Button size="sm" variant="outline" asChild>
+                                        {/* Updated Link to go directly to the answer page */}
+                                        <Link to={`/questions/${question._id}/answer`}>Answer</Link>
+                                    </Button>
                                     </div>
                                 </div>
                             ))

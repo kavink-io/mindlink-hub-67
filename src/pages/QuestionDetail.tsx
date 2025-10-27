@@ -1,5 +1,5 @@
 // src/pages/QuestionDetail.tsx
-import { useState, useEffect, FormEvent } from 'react'; // Added FormEvent
+import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,15 +20,16 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Send, Flag } from 'lucide-react'; // Added Flag
+// UPDATED imports: Remove Send, Add MessageSquarePlus
+import { ArrowLeft, Flag, MessageSquarePlus } from 'lucide-react';
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress"; // Keep if used elsewhere, currently unused here
+// import { Progress } from "@/components/ui/progress"; // Keep if used elsewhere
 
 // Define the base URL for your backend API
 const API_URL = "http://localhost:5000/api"; // Adjust port/host if needed
 
-// Interfaces matching backend models (can be moved to a types file later)
+// --- Interfaces --- (Keep as they are)
 interface Author {
     _id: string;
     name: string;
@@ -69,10 +70,12 @@ const QuestionDetail = () => {
     const navigate = useNavigate();
     const [question, setQuestion] = useState<Question | null>(null);
     const [answers, setAnswers] = useState<Answer[]>([]);
-    const [newAnswerBody, setNewAnswerBody] = useState('');
+    // REMOVED state for direct answer input
+    // const [newAnswerBody, setNewAnswerBody] = useState('');
     const [isLoadingQuestion, setIsLoadingQuestion] = useState(true);
     const [isLoadingAnswers, setIsLoadingAnswers] = useState(true);
-    const [isPostingAnswer, setIsPostingAnswer] = useState(false);
+    // REMOVED state for direct answer submission
+    // const [isPostingAnswer, setIsPostingAnswer] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // --- State for Report Dialog ---
@@ -142,62 +145,7 @@ const QuestionDetail = () => {
         }
     }, [questionId, question, isLoadingQuestion]); // Refetch if questionId changes or question loads
 
-    // --- Handle Posting New Answer ---
-    const handlePostAnswer = async (e: FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        if (!newAnswerBody.trim()) {
-            toast.warning("Answer cannot be empty.");
-            return;
-        }
-        if (!isLoggedIn || !token) {
-            toast.error("You must be logged in to post an answer.");
-            navigate('/auth');
-            return;
-        }
-         if (!questionId) {
-            toast.error("Cannot post answer: Question ID is missing.");
-            return;
-         }
-
-        setIsPostingAnswer(true);
-        try {
-             const response = await fetch(`${API_URL}/questions/${questionId}/answers`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`, // Include auth token
-                },
-                body: JSON.stringify({ body: newAnswerBody }),
-            });
-
-            const data = await response.json();
-
-             if (!response.ok) {
-                throw new Error(data.message || `HTTP error! status: ${response.status}`);
-            }
-
-            toast.success("Answer posted successfully!");
-            setNewAnswerBody(''); // Clear textarea
-            // Add the new answer to the list immediately for better UX
-             const currentUserData = JSON.parse(localStorage.getItem('mindlinkUser') || '{}');
-             const newAnswerWithAuthor: Answer = {
-                ...data, // Assuming backend returns the full answer object (_id, body, question, createdAt etc.)
-                author: { // Manually add author details from local storage
-                     _id: currentUserData?.id || 'unknown',
-                     name: currentUserData?.name || 'You',
-                }
-             };
-
-            setAnswers(prevAnswers => [...prevAnswers, newAnswerWithAuthor]);
-
-
-        } catch (error: any) {
-            console.error("Failed to post answer:", error);
-            toast.error(error.message || "Failed to post answer. Please try again.");
-        } finally {
-             setIsPostingAnswer(false);
-        }
-     };
+    // --- REMOVED handlePostAnswer function ---
 
      // --- Handle Opening Report Dialog ---
     const openReportDialog = (contentType: 'question' | 'answer', contentId: string, snippet?: string) => {
@@ -383,7 +331,7 @@ const QuestionDetail = () => {
                 {isLoadingAnswers ? (
                      <Skeleton className="h-24 w-full" />
                 ) : answers.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-4">No answers yet. Be the first to answer!</p>
+                    <p className="text-muted-foreground text-center py-4">No answers yet.</p> // Modified message
                 ) : (
                     answers.map(answer => (
                         <Card key={answer._id} className="shadow-sm relative group"> {/* Added relative group */}
@@ -421,39 +369,24 @@ const QuestionDetail = () => {
 
              <Separator className="my-6" />
 
-            {/* Post Answer Form */}
-            {isLoggedIn ? (
-                 <Card className="shadow-md">
-                     <CardHeader>
-                        <CardTitle className="text-lg font-semibold">Your Answer</CardTitle>
-                     </CardHeader>
-                     <CardContent>
-                        <form onSubmit={handlePostAnswer} className="space-y-4">
-                             <div>
-                                <Label htmlFor="new-answer-body" className="sr-only">Your Answer</Label>
-                                <Textarea
-                                    id="new-answer-body"
-                                    value={newAnswerBody}
-                                    onChange={(e) => setNewAnswerBody(e.target.value)}
-                                    placeholder="Share your knowledge..."
-                                    rows={5}
-                                    required
-                                    className="text-sm"
-                                />
-                             </div>
-                             <Button type="submit" disabled={isPostingAnswer || !newAnswerBody.trim()}>
-                                 {isPostingAnswer ? "Posting..." : <> <Send className="mr-2 h-4 w-4" /> Post Answer </>}
-                            </Button>
-                         </form>
-                    </CardContent>
-                 </Card>
-            ) : (
-                 <div className="text-center p-4 border rounded-md bg-muted">
-                    <p className="text-muted-foreground">
-                        You need to be <Link to="/auth" className="text-primary underline">logged in</Link> to post an answer.
-                    </p>
-                </div>
-            )}
+            {/* *** MODIFIED SECTION: Button to Add Answer Page *** */}
+            <div className="mt-8 flex justify-center">
+                 {isLoggedIn ? (
+                     <Button size="lg" asChild>
+                         {/* Link to the dedicated answer page for this question */}
+                         <Link to={`/questions/${questionId}/answer`}>
+                            <MessageSquarePlus className="mr-2 h-5 w-5" /> Add Your Answer
+                         </Link>
+                     </Button>
+                 ) : (
+                     <div className="text-center p-4 border rounded-md bg-muted w-full max-w-lg">
+                        <p className="text-muted-foreground">
+                            You need to be <Link to="/auth" className="text-primary underline">logged in</Link> to post an answer.
+                        </p>
+                    </div>
+                 )}
+            </div>
+            {/* *** END MODIFIED SECTION *** */}
 
 
             {/* Report Content Dialog */}

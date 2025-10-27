@@ -1,3 +1,6 @@
+// This is your card component file (e.g., src/components/ui/card.tsx)
+// This code is standard and correct. No updates are needed.
+
 import * as React from "react";
 
 import { cn } from "@/lib/utils";

@@ -10,7 +10,8 @@ import StudentDashboard from "./pages/StudentDashboard";
 import TeacherDashboard from "./pages/TeacherDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import AskQuestion from "./pages/AskQuestion";
-import QuestionDetail from "./pages/QuestionDetail"; // <-- Import QuestionDetail
+import QuestionDetail from "./pages/QuestionDetail";
+import AddAnswer from "./pages/AddAnswer"; // <-- Import the new component
 import UploadNote from "./pages/UploadNote";
 import FocusTimer from "./pages/FocusTimer";
 import RelaxRoom from "./pages/RelaxRoom";
@@ -35,10 +36,11 @@ const App = () => (
           <Route path="/dashboard/admin" element={<AdminDashboard />} />
           <Route path="/ask" element={<AskQuestion />} />
           <Route path="/questions/:id" element={<QuestionDetail />} />
+          <Route path="/questions/:id/answer" element={<AddAnswer />} /> {/* <-- Add this route */}
           <Route path="/notes/upload" element={<UploadNote />} />
           <Route path="/timer" element={<FocusTimer />} />
           <Route path="/relax" element={<RelaxRoom />} />
-          <Route path="/quiz/create" element={<CreateQuiz />} /> 
+          <Route path="/quiz/create" element={<CreateQuiz />} />
           <Route path="/quizzes" element={<QuizList />} />{/* <-- Add route */}
           <Route path="/quizzes/:id/take" element={<TakeQuiz />} />
           {/* <Route path="/quizzes/:id/take" element={<TakeQuiz />} /> */}
