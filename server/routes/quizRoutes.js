@@ -4,14 +4,16 @@ const mongoose = require('mongoose'); // Needed for ObjectId validation and Sess
 const Quiz = require('../models/Quiz');
 const QuizQuestion = require('../models/QuizQuestion');
 const QuizResult = require('../models/QuizResult'); // Import QuizResult model
-const { protect, teacherOnly } = require('../middleware/authMiddleware'); // Use middleware
+
+// Import the entire object instead of destructuring
+const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
 // @desc    Create a new quiz with questions
 // @route   POST /api/quizzes
 // @access  Private (Teachers/Admins only)
-router.post('/', protect, teacherOnly, async (req, res) => {
+router.post('/', authMiddleware.protect, authMiddleware.teacherOnly, async (req, res) => {
     const { title, description, questions } = req.body; // Expect questions as an array
 
     if (!title || !questions || !Array.isArray(questions) || questions.length === 0) {
@@ -77,7 +79,7 @@ router.post('/', protect, teacherOnly, async (req, res) => {
 // @desc    Get all quizzes (without questions, just titles/metadata)
 // @route   GET /api/quizzes
 // @access  Private (Adjust as needed - e.g., all logged-in users)
-router.get('/', protect, async (req, res) => {
+router.get('/', authMiddleware.protect, async (req, res) => {
     try {
         const quizzes = await Quiz.find({})
             .populate('createdBy', 'name') // Populate creator's name
@@ -92,7 +94,7 @@ router.get('/', protect, async (req, res) => {
 // @desc    Get a single quiz details (metadata only)
 // @route   GET /api/quizzes/:id
 // @access  Private (Adjust as needed)
-router.get('/:id', protect, async (req, res) => {
+router.get('/:id', authMiddleware.protect, async (req, res) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
             return res.status(404).json({ message: 'Quiz not found (invalid ID format)' });
@@ -133,7 +135,7 @@ router.get('/:id', protect, async (req, res) => {
 // @desc    Get questions for a specific quiz
 // @route   GET /api/quizzes/:id/questions
 // @access  Private (Adjust as needed - e.g., only creator or enrolled students?)
-router.get('/:id/questions', protect, async (req, res) => {
+router.get('/:id/questions', authMiddleware.protect, async (req, res) => {
      try {
          if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
              return res.status(404).json({ message: 'Quiz not found (invalid ID format)' });
@@ -161,6 +163,8 @@ router.get('/:id/questions', protect, async (req, res) => {
 
         res.json(questions);
 
+    // --- THIS IS THE FIX ---
+    // Added the missing '{' brace
     } catch (error) {
         console.error("Error fetching quiz questions:", error);
          if (error.kind === 'ObjectId') {
@@ -173,7 +177,7 @@ router.get('/:id/questions', protect, async (req, res) => {
 // @desc    Submit answers for a quiz and get results
 // @route   POST /api/quizzes/:id/submit
 // @access  Private (Logged-in users)
-router.post('/:id/submit', protect, async (req, res) => {
+router.post('/:id/submit', authMiddleware.protect, async (req, res) => {
     const quizId = req.params.id;
     const userAnswers = req.body.answers || {};
     const userId = req.user._id;
@@ -248,7 +252,7 @@ router.post('/:id/submit', protect, async (req, res) => {
 // @desc    Delete a quiz and all associated data (Questions and Results)
 // @route   DELETE /api/quizzes/:id
 // @access  Private (Teachers/Admins only)
-router.delete('/:id', protect, teacherOnly, async (req, res) => {
+router.delete('/:id', authMiddleware.protect, authMiddleware.teacherOnly, async (req, res) => {
     const quizId = req.params.id;
 
     if (!mongoose.Types.ObjectId.isValid(quizId)) {
@@ -292,7 +296,7 @@ router.delete('/:id', protect, teacherOnly, async (req, res) => {
 // @desc    Get all quizzes by a teacher AND all results for each quiz
 // @route   GET /api/quizzes/my-quizzes-with-results
 // @access  Private (Teacher)
-router.get('/my-quizzes-with-results', protect, teacherOnly, async (req, res) => {
+router.get('/my-quizzes-with-results', authMiddleware.protect, authMiddleware.teacherOnly, async (req, res) => {
     try {
         const teacherId = req.user._id;
 

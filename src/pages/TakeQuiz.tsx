@@ -296,7 +296,9 @@ const TakeQuiz = () => {
             {currentQuestion?.questionText ?? 'Loading question...'}
           </div>
 
-          {/* ✅ Only ONE option can be selected at once */}
+          {/* This RadioGroup is correct. The 'value' is bound to selectedOptionId,
+              and onValueChange updates it. This *can* only select one option.
+              The bug was that option._id was undefined for all options. */}
           <RadioGroup
             value={selectedOptionId}
             onValueChange={handleOptionChange}

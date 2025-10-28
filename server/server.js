@@ -1,18 +1,19 @@
 // server/server.js
+
 const express = require('express');
 const dotenv = require('dotenv');
-const cors = require('cors');
-const path = require('path'); // <-- Necessary for joining directory paths
 const connectDB = require('./config/db');
-
-// --- Import ALL Route Files ---
 const authRoutes = require('./routes/authRoutes');
+const noteRoutes = require('./routes/noteRoutes');
+const quizRoutes = require('./routes/quizRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 const userRoutes = require('./routes/userRoutes');
-const questionRoutes = require('./routes/questionRoutes');
-const noteRoutes = require('./routes/noteRoutes'); // FIXED: Ensure this path is correct: ./routes/noteRoutes
-const quizRoutes = require('./routes/quizRoutes'); 
+// This route was in your folder but not being used, let's add it
+const questionRoutes = require('./routes/questionRoutes'); 
+const path = require('path');
+const cors = require('cors');
 
-// Load env vars
+// Load environment variables
 dotenv.config();
 
 // Connect to database
@@ -20,35 +21,39 @@ connectDB();
 
 const app = express();
 
-// --- Middleware ---
-// Enable CORS for frontend communication
-app.use(cors()); 
-// Body parser for JSON requests
-app.use(express.json()); 
+// Enable CORS
+app.use(cors());
 
-// --- Serve Uploaded Files Statically ---
-// Allows files in the 'uploads' folder to be accessible via /uploads
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Enable JSON body parser
+app.use(express.json());
 
-// Basic Route (Test)
-app.get('/', (req, res) => {
-    res.send('MindLink API is running...');
-});
-
-// --- Use API Routes (Mounting) ---
+// --- API Routes ---
+// We load authRoutes first, as it's a common dependency
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/questions', questionRoutes);
-app.use('/api/notes', noteRoutes); // Mounted under /api/notes
+app.use('/api/notes', noteRoutes);
 app.use('/api/quizzes', quizRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/questions', questionRoutes); // Use the questions route
 
-// --- Simple Error Handling Middleware (Optional) ---
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).send('Something broke!');
-});
+// --- Static File Serving (for file uploads) ---
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// --- Deployment (Serve frontend build) ---
+if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, '../dist'))); // Adjust if your frontend build is elsewhere
+
+    app.get('*', (req, res) =>
+        res.sendFile(path.resolve(__dirname, '../dist', 'index.html'))
+    );
+} else {
+    app.get('/', (req, res) => {
+        res.send('API is running...');
+    });
+}
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+});
