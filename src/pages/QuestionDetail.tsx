@@ -258,15 +258,15 @@ const QuestionDetail = () => {
     }
 
     if (!question) {
-        return (
-             <div className="container mx-auto px-4 py-8 max-w-4xl text-center">
-                 <p className="text-muted-foreground">Question not found.</p>
-                  <Button variant="outline" onClick={() => navigate(-1)} className="mt-4">
-                     Go Back
-                 </Button>
-            </div>
-        );
-    }
+    return (
+        <div className="container mx-auto p-4 max-w-4xl text-center">
+            <h1 className="text-2xl font-bold mb-4">Question Not Found</h1>
+             <Button onClick={() => navigate(-1)}>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Go Back
+            </Button>
+        </div>
+    );
+}
 
     // --- Render Main Content ---
     return (
