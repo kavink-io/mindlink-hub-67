@@ -95,22 +95,38 @@ router.get('/', protect, async (req, res) => {
 router.get('/:id', protect, async (req, res) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-             return res.status(404).json({ message: 'Quiz not found (invalid ID format)' });
+            return res.status(404).json({ message: 'Quiz not found (invalid ID format)' });
         }
-        const quiz = await Quiz.findById(req.params.id)
-             .populate('createdBy', 'name');
 
-        if (quiz) {
-            res.json(quiz);
-        } else {
-            res.status(404).json({ message: 'Quiz not found' });
+        // --- Fetch Quiz Metadata ---
+        const quiz = await Quiz.findById(req.params.id)
+             .populate('createdBy', 'name') // Keep populating creator name
+             .lean(); // Use lean for faster plain JS object
+
+        if (!quiz) {
+            return res.status(404).json({ message: 'Quiz not found' });
         }
+
+        // --- Fetch Associated Questions (excluding correct answer info) ---
+        const questions = await QuizQuestion.find({ quiz: req.params.id })
+            .select('-quiz -options.isCorrect') // Exclude quiz ID and correct answer flag
+            .lean(); // Use lean
+
+        // --- Combine quiz metadata and questions ---
+        const quizDataWithQuestions = {
+            ...quiz,
+            questions: questions // Attach the fetched questions array
+        };
+
+        res.json(quizDataWithQuestions); // Send the combined object
+
     } catch (error) {
+        // ... (keep existing catch block)
          console.error("Error fetching quiz details:", error);
          if (error.kind === 'ObjectId') {
              return res.status(404).json({ message: 'Quiz not found (invalid ID format)' });
-        }
-        res.status(500).json({ message: 'Server error fetching quiz details.' });
+         }
+         res.status(500).json({ message: 'Server error fetching quiz details.' });
     }
 });
 
@@ -273,5 +289,42 @@ router.delete('/:id', protect, teacherOnly, async (req, res) => {
     }
 });
 
+// @desc    Get all quizzes by a teacher AND all results for each quiz
+// @route   GET /api/quizzes/my-quizzes-with-results
+// @access  Private (Teacher)
+router.get('/my-quizzes-with-results', protect, teacherOnly, async (req, res) => {
+    try {
+        const teacherId = req.user._id;
+
+        // 1. Find all quizzes created by this teacher
+        const quizzes = await Quiz.find({ createdBy: teacherId })
+                                  .sort({ createdAt: -1 })
+                                  .lean(); // Use .lean() for plain JS objects
+
+        if (!quizzes.length) {
+            return res.json([]);
+        }
+
+        // 2. For each quiz, find all results and populate student names
+        const quizzesWithResults = await Promise.all(quizzes.map(async (quiz) => {
+            const results = await QuizResult.find({ quiz: quiz._id })
+                .populate('student', 'name') // Populate student's name
+                .sort({ score: -1 }) // Show highest scores first
+                .lean();
+
+            return {
+                ...quiz,
+                results,
+                participantCount: results.length
+            };
+        }));
+
+        res.json(quizzesWithResults);
+
+    } catch (error) {
+        console.error('Error fetching teacher quizzes with results:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
 
 module.exports = router;

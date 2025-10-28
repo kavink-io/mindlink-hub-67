@@ -114,17 +114,94 @@ router.post(
 // @desc    Get all notes
 // @route   GET /api/notes
 // @access  Private
-router.get('/', protect, async (req, res) => { /* ... */ });
+router.get('/', protect, async (req, res) => {
+    try {
+        // Find all notes, sort by newest, and populate the 'name' of the uploader
+        const notes = await Note.find({})
+            .populate('uploadedBy', 'name')
+            .sort({ createdAt: -1 });
+        res.json(notes);
+    } catch (error) {
+        console.error('Error fetching notes:', error);
+        res.status(500).json({ message: 'Server error while fetching notes.' });
+    }
+});
 
 // @desc    Download a specific note file
 // @route   GET /api/notes/download/:id
 // @access  Private
-router.get('/download/:id', protect, async (req, res) => { /* ... */ });
+router.get('/download/:id', protect, async (req, res) => {
+    try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ message: 'Invalid Note ID.' });
+        }
+        
+        const note = await Note.findById(req.params.id);
+
+        if (!note) {
+            return res.status(404).json({ message: 'Note not found.' });
+        }
+
+        // Check if file exists before attempting to send
+        if (!fs.existsSync(note.filePath)) {
+            console.error(`File not found at path: ${note.filePath}`);
+            return res.status(404).json({ message: 'File not found on server. It may have been deleted.' });
+        }
+
+        // Send the file for download, using original name
+        res.download(note.filePath, note.fileName, (err) => {
+            if (err) {
+                console.error('Error downloading file:', err);
+                // Headers might already be sent, so just log error
+            }
+        });
+
+    } catch (error) {
+        console.error('Error downloading note:', error);
+        res.status(500).json({ message: 'Server error while downloading note.' });
+    }
+});
 
 // @desc    Delete a note and its associated file
 // @route   DELETE /api/notes/:id
-// @access  Private (Teachers/Admins, or owner)
-router.delete('/:id', protect, teacherOnly, async (req, res) => { /* ... */ });
+// @access  Private (Teachers/Admins)
+router.delete('/:id', protect, teacherOnly, async (req, res) => {
+    try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({ message: 'Invalid Note ID.' });
+        }
+
+        const note = await Note.findById(req.params.id);
+
+        if (!note) {
+            return res.status(404).json({ message: 'Note not found.' });
+        }
+
+        // --- Delete the file from the filesystem ---
+        // Check if file exists before trying to delete
+        if (fs.existsSync(note.filePath)) {
+            fs.unlink(note.filePath, (err) => {
+                if (err) {
+                    // Log the error but proceed to delete DB entry anyway
+                    console.error('Error deleting file from disk:', err);
+                } else {
+                    console.log(`Successfully deleted file: ${note.filePath}`);
+                }
+            });
+        } else {
+             console.warn(`File not found for deletion, removing DB entry: ${note.filePath}`);
+        }
+
+        // --- Delete the note from the database ---
+        await note.deleteOne(); // Use deleteOne() on the document instance
+
+        res.json({ message: 'Note removed successfully.' });
+
+    } catch (error) {
+        console.error('Error deleting note:', error);
+        res.status(500).json({ message: 'Server error while deleting note.' });
+    }
+});
 
 
 module.exports = router;

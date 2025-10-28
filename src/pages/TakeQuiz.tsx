@@ -1,379 +1,377 @@
 // src/pages/TakeQuiz.tsx
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator"; // Added Separator for results page
-import { ArrowLeft, CheckCircle, XCircle, RefreshCw } from 'lucide-react'; // Added RefreshCw
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Skeleton } from "@/components/ui/skeleton"; // For loading
-import { Progress } from "@/components/ui/progress"; // For quiz progress
-import { cn } from "@/lib/utils"; // Import cn utility
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
 
 // Define the base URL for your backend API
-const API_URL = "http://localhost:5000/api"; // Adjust port/host if needed
+const API_URL = "http://localhost:5000/api";
 
 // --- Interfaces ---
-interface Author { _id: string; name: string; }
-interface QuizOption { _id: string; text: string; }
-interface QuizQuestionData { _id: string; questionText: string; options: QuizOption[]; }
-interface QuizMetadata { _id: string; title: string; description?: string; }
-type UserAnswers = Record<string, string>; // { questionId: selectedOptionId }
-// Interface for Quiz Results from backend
-interface QuizResults {
-    quizId: string;
-    userId: string;
-    score: number;
-    totalQuestions: number;
-    submittedAnswers: UserAnswers;
-    correctAnswers: Record<string, string>; // { questionId: correctOptionId }
-    resultId: string;
+interface QuizQuestion {
+    _id: string;
+    questionText: string;
+    options: string[];
+    correctAnswer: string; // Note: Student should NOT see this
 }
 
+interface Quiz {
+    _id: string;
+    title: string;
+    questions: QuizQuestion[];
+    createdBy: {
+        _id: string;
+        name: string;
+    };
+    createdAt: string;
+}
+
+// Interface for the quiz result
+interface QuizResult {
+    score: number;
+    totalQuestions: number;
+    percentage: number;
+    quizTitle: string;
+}
+
+// Type for storing selected answers
+type SelectedAnswers = Record<string, string>; // { questionId: "selectedOption" }
+
 const TakeQuiz = () => {
-    const { id: quizId } = useParams<{ id: string }>();
+    const { id: quizId } = useParams();
     const navigate = useNavigate();
 
-    const [quizMetadata, setQuizMetadata] = useState<QuizMetadata | null>(null);
-    const [questions, setQuestions] = useState<QuizQuestionData[]>([]);
-    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-    const [userAnswers, setUserAnswers] = useState<UserAnswers>({});
-    const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>(undefined);
-
+    const [quiz, setQuiz] = useState<Quiz | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+    const [selectedAnswers, setSelectedAnswers] = useState<SelectedAnswers>({});
+
+    const [showResult, setShowResult] = useState(false);
+    const [result, setResult] = useState<QuizResult | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    // State for showing results
-    const [results, setResults] = useState<QuizResults | null>(null);
 
-    const token = localStorage.getItem('mindlinkToken');
-    const isLoggedIn = !!token;
+    // Alert dialog state for confirming submission
+    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
-    // --- Fetch Quiz Metadata and Questions ---
+
+    // --- Fetch Quiz Details ---
     useEffect(() => {
-        const fetchQuizData = async () => {
-             if (!quizId) { setError("Quiz ID not found."); setIsLoading(false); return; }
-             setIsLoading(true); setError(null);
-             if (!token) { toast.error("Log in required."); navigate('/auth'); return; }
-             const headers: HeadersInit = { 'Authorization': `Bearer ${token}` };
-
+        const fetchQuiz = async () => {
+            if (!quizId) {
+                setError("No quiz ID provided.");
+                setIsLoading(false);
+                return;
+            }
+            setIsLoading(true);
+            setError(null);
             try {
-                const [metaResponse, questionsResponse] = await Promise.all([
-                    fetch(`${API_URL}/quizzes/${quizId}`, { headers }),
-                    fetch(`${API_URL}/quizzes/${quizId}/questions`, { headers }) // Fetches questions *without* correct answers
-                ]);
-                if (!metaResponse.ok) throw new Error((await metaResponse.json()).message || 'Failed to load quiz details');
-                if (!questionsResponse.ok) throw new Error((await questionsResponse.json()).message || 'Failed to load quiz questions');
-                const metaData: QuizMetadata = await metaResponse.json();
-                const questionsData: QuizQuestionData[] = await questionsResponse.json();
-                if (questionsData.length === 0) throw new Error("Quiz has no questions.");
+                const token = localStorage.getItem('mindlinkToken');
+                if (!token) throw new Error("Not authorized. Please log in.");
 
-                setQuizMetadata(metaData);
-                setQuestions(questionsData);
-                setUserAnswers({}); setSelectedOptionId(undefined); setCurrentQuestionIndex(0); setResults(null); // Reset state
+                // *** THIS IS THE FIX for the 404 error ***
+                // It now fetches from /api/quizzes/:id
+                const response = await fetch(`${API_URL}/quizzes/${quizId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+                }
+
+                const data: Quiz = await response.json();
+                
+                // CRITICAL: Remove correctAnswer before setting state
+                // We don't want the correct answer available in the component's state
+                const questionsWithoutAnswers = data.questions.map(q => ({
+                    ...q,
+                    correctAnswer: '' // Remove correct answer
+                }));
+
+                setQuiz({ ...data, questions: questionsWithoutAnswers });
+
             } catch (err: any) {
-                console.error("Failed to fetch quiz data:", err);
-                setError(err.message || "Failed to load quiz.");
-                toast.error(err.message || "Failed to load quiz.");
-            } finally { setIsLoading(false); }
+                setError(err.message || "Failed to load the quiz.");
+                toast.error(err.message || "Failed to load the quiz.");
+            } finally {
+                setIsLoading(false);
+            }
         };
-        fetchQuizData();
-    }, [quizId, navigate, token]); // Added token dependency
+        fetchQuiz();
+    }, [quizId]);
+
+
+    // --- Answer Selection Handler ---
+    const handleAnswerChange = (questionId: string, value: string) => {
+        setSelectedAnswers(prev => ({
+            ...prev,
+            [questionId]: value,
+        }));
+    };
 
     // --- Navigation Handlers ---
-    const handleNextQuestion = () => {
-        saveCurrentAnswer();
-        if (currentQuestionIndex < questions.length - 1) {
-            const nextIndex = currentQuestionIndex + 1;
-            setCurrentQuestionIndex(nextIndex);
-            setSelectedOptionId(userAnswers[questions[nextIndex]?._id]); // Add null check
-        } else {
-             handleSubmitQuiz();
+    const handleNext = () => {
+        if (quiz && currentQuestionIndex < quiz.questions.length - 1) {
+            setCurrentQuestionIndex(prev => prev + 1);
         }
     };
-    const handlePreviousQuestion = () => {
-        saveCurrentAnswer();
+
+    const handleBack = () => {
         if (currentQuestionIndex > 0) {
-             const prevIndex = currentQuestionIndex - 1;
-            setCurrentQuestionIndex(prevIndex);
-            setSelectedOptionId(userAnswers[questions[prevIndex]?._id]); // Add null check
+            setCurrentQuestionIndex(prev => prev - 1);
         }
     };
 
-    // --- Answer Handling ---
-     const handleOptionChange = (optionId: string) => { setSelectedOptionId(optionId); };
-     const saveCurrentAnswer = () => {
-         if (selectedOptionId && questions.length > currentQuestionIndex) { // Check index bounds
-             const currentQuestionId = questions[currentQuestionIndex]._id;
-             setUserAnswers(prev => ({ ...prev, [currentQuestionId]: selectedOptionId }));
-         }
-     };
-
-    // --- Submit Quiz ---
-     const handleSubmitQuiz = async () => {
-         saveCurrentAnswer(); // Save the very last answer
-         const finalAnswers = { ...userAnswers }; // Use the state *after* saving last answer
-          // Ensure the currently selected option for the last question is included
-         if (selectedOptionId && questions.length > currentQuestionIndex && currentQuestionIndex === questions.length - 1) {
-            finalAnswers[questions[currentQuestionIndex]._id] = selectedOptionId;
-         }
-
-         const answeredCount = Object.keys(finalAnswers).length;
-         if (answeredCount < questions.length) {
-             if (!window.confirm(`You haven't answered all questions (${answeredCount}/${questions.length}). Submit anyway?`)) {
-                 return;
-             }
-         }
+    // --- Quiz Submission Handler ---
+    const handleSubmit = async () => {
+        setIsConfirmOpen(false); // Close the confirmation dialog
+        if (!quiz) return;
 
         setIsSubmitting(true);
-         if (!token) {
-             toast.error("Authentication error. Please log in again.");
-             setIsSubmitting(false);
-             navigate('/auth');
-             return;
-         }
+        setError(null);
 
         try {
+            const token = localStorage.getItem('mindlinkToken');
+            if (!token) throw new Error("Not authorized. Please log in.");
+
+            // Format answers to match backend expectation
+            const formattedAnswers = Object.entries(selectedAnswers).map(([questionId, selectedOption]) => ({
+                questionId: questionId,
+                selectedAnswer: selectedOption,
+            }));
+
             const response = await fetch(`${API_URL}/quizzes/${quizId}/submit`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
+                    'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ answers: finalAnswers }), // Send the final answers
+                body: JSON.stringify({ answers: formattedAnswers })
             });
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.message || 'Failed to submit quiz');
+
+             if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
             }
-            const resultData: QuizResults = await response.json(); // Expect QuizResults structure
 
-            toast.success(`Quiz submitted! Your score: ${resultData.score} / ${resultData.totalQuestions}`);
-            setResults(resultData); // Set results state to display feedback
+            const resultData: QuizResult = await response.json();
+            setResult(resultData);
+            setShowResult(true);
+            toast.success("Quiz submitted successfully!");
 
-        } catch (error: any) {
-             console.error("Failed to submit quiz:", error);
-            toast.error(error.message || "Failed to submit quiz.");
+        } catch (err: any) {
+             setError(err.message || "Failed to submit the quiz.");
+             toast.error(err.message || "Failed to submit the quiz.");
         } finally {
             setIsSubmitting(false);
         }
-     };
-
-     // --- Restart Quiz ---
-     const restartQuiz = () => {
-         setCurrentQuestionIndex(0);
-         setUserAnswers({});
-         setSelectedOptionId(undefined);
-         setResults(null); // Clear results
-         // Optional: refetch questions if they could have changed? Unlikely for a static quiz.
-     };
+    };
 
 
-    // --- Render Loading/Error States ---
+    // --- Render Logic ---
+
+    // Loading State
     if (isLoading) {
-       return (
-            <div className="container mx-auto px-4 py-8 max-w-2xl">
-                 <Skeleton className="h-8 w-1/4 mb-4" /> {/* Back button placeholder */}
-                 <Skeleton className="h-10 w-3/4 mb-2" /> {/* Title */}
-                 <Skeleton className="h-5 w-1/2 mb-6" /> {/* Description */}
-                 <Skeleton className="h-6 w-1/3 mb-8" /> {/* Progress */}
-                 <Skeleton className="h-48 w-full mb-6" /> {/* Question + Options area */}
-                 <Skeleton className="h-12 w-full" /> {/* Buttons */}
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-background">
+                <Card className="w-[90%] max-w-2xl shadow-lg">
+                    <CardHeader>
+                        <Skeleton className="h-8 w-3/4 mb-2" />
+                        <Skeleton className="h-4 w-1/2" />
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <Skeleton className="h-6 w-full mb-4" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                        <Skeleton className="h-10 w-full" />
+                    </CardContent>
+                    <CardFooter className="flex justify-between">
+                        <Skeleton className="h-10 w-24" />
+                        <Skeleton className="h-10 w-24" />
+                    </CardFooter>
+                </Card>
             </div>
         );
     }
 
+    // Error State
     if (error) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-background p-4">
+                <Card className="w-[90%] max-w-lg shadow-lg border-destructive">
+                    <CardHeader className="items-center">
+                         <AlertCircle className="w-12 h-12 text-destructive" />
+                        <CardTitle className="text-destructive">Error Loading Quiz</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-center">
+                        <p className="text-muted-foreground mb-6">{error}</p>
+                         <Button asChild variant="outline">
+                            <Link to="/quizzes">
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                Back to Quiz List
+                            </Link>
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
+    // Quiz Finished - Show Result State
+    if (showResult && result) {
          return (
-             <div className="container mx-auto px-4 py-8 max-w-2xl text-center">
-                <p className="text-destructive">⚠️ Error: {error}</p>
-                 <Button variant="outline" onClick={() => navigate(-1)} className="mt-4">
-                     Go Back
-                 </Button>
-             </div>
-            );
-    }
-
-    if (!quizMetadata || questions.length === 0) {
-        return (
-             <div className="container mx-auto px-4 py-8 max-w-2xl text-center">
-                 <p className="text-muted-foreground">Quiz data could not be loaded or is empty.</p>
-                  <Button variant="outline" onClick={() => navigate(-1)} className="mt-4">
-                     Go Back
-                 </Button>
-            </div>
-        );
-    }
-
-    // --- Current Question Data ---
-    const currentQuestion = questions[currentQuestionIndex];
-    const quizProgress = ((currentQuestionIndex + 1) / questions.length) * 100;
-
-
-    // --- *** RENDER RESULTS *** ---
-    if (results) {
-        const scorePercentage = ((results.score / results.totalQuestions) * 100).toFixed(0);
-        return (
-            <div className="min-h-screen bg-background py-8 px-4">
-                <div className="container mx-auto max-w-2xl">
-                    <Card className="shadow-lg">
-                        <CardHeader className="text-center">
-                            <CardTitle className="text-2xl font-bold">Quiz Results: {quizMetadata?.title}</CardTitle>
-                            <CardDescription>
-                                You scored {results.score} out of {results.totalQuestions} ({scorePercentage}%)
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            <h3 className="text-lg font-semibold mb-4">Review Your Answers:</h3>
-                            {questions.map((q, index) => {
-                                const userAnswerId = results.submittedAnswers[q._id];
-                                const correctAnswerId = results.correctAnswers[q._id];
-                                const isCorrect = userAnswerId === correctAnswerId;
-                                return (
-                                    <div key={q._id} className={cn("p-4 border rounded-md",
-                                        isCorrect ? "border-green-300 bg-green-50/50" : "border-red-300 bg-red-50/50"
-                                    )}>
-                                        <p className="font-semibold mb-3">{index + 1}. {q.questionText}</p>
-                                        <div className="space-y-2">
-                                            {q.options.map(opt => {
-                                                const isSelected = userAnswerId === opt._id;
-                                                const isActualCorrect = correctAnswerId === opt._id;
-                                                return (
-                                                    <div key={opt._id} className={cn("flex items-center text-sm p-2 rounded",
-                                                        // Highlight correct answer always
-                                                        isActualCorrect ? "bg-green-100 font-medium" : "",
-                                                        // If selected wrong, cross it out and show red background
-                                                        isSelected && !isActualCorrect ? "bg-red-100 line-through" : ""
-                                                    )}>
-                                                        {/* Icon Logic */}
-                                                        {isSelected ? ( // Icon for the selected answer
-                                                             isCorrect ? <CheckCircle className="h-4 w-4 mr-2 text-green-700 flex-shrink-0"/> : <XCircle className="h-4 w-4 mr-2 text-red-700 flex-shrink-0"/>
-                                                        ): ( // Show correct checkmark if this wasn't selected but *was* correct
-                                                             isActualCorrect ? <CheckCircle className="h-4 w-4 mr-2 text-green-700 flex-shrink-0"/> : <span className="w-4 h-4 mr-2 flex-shrink-0"/> // Placeholder for alignment
-                                                        )}
-                                                        <span>{opt.text}</span>
-                                                    </div>
-                                                );
-                                            })}
-                                            {/* Show message if question was not answered */}
-                                            {!userAnswerId && correctAnswerId && (
-                                                <div className="flex items-center text-sm p-2 rounded bg-orange-100 text-orange-700 italic mt-1">
-                                                     <CheckCircle className="h-4 w-4 mr-2 flex-shrink-0"/> Correct answer was: {questions[index].options.find(o => o._id === correctAnswerId)?.text} (Not Answered)
-                                                </div>
-                                             )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                             <Separator className="my-4" />
-                             <div className="flex justify-center gap-4">
-                                <Button variant="outline" onClick={restartQuiz}>
-                                     <RefreshCw className="mr-2 h-4 w-4"/> Retake Quiz
-                                </Button>
-                                <Button onClick={() => navigate('/dashboard/student')}> {/* Or navigate to quiz list /quizzes */}
-                                     Back to Dashboard
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        );
-    }
-
-
-    // --- *** RENDER QUIZ TAKING UI *** ---
-    return (
-        <div className="min-h-screen bg-gradient-secondary flex items-center justify-center p-4">
-            <Card className="w-full max-w-2xl shadow-lg">
-                <CardHeader>
-                     {/* Back Button */}
-                    <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="absolute top-4 left-4 h-8 w-8 p-0" disabled={isSubmitting}>
-                         <ArrowLeft className="h-4 w-4" />
-                         <span className="sr-only">Go Back</span>
-                    </Button>
-                    <CardTitle className="text-2xl font-bold text-center pt-2">{quizMetadata?.title}</CardTitle> {/* Added optional chaining */}
-                    {quizMetadata?.description && (
-                        <CardDescription className="text-center">{quizMetadata.description}</CardDescription>
-                    )}
-                     {/* Progress Bar */}
-                     <div className="pt-4 space-y-1">
-                        <Progress value={quizProgress} className="w-full h-2" />
-                        <p className="text-xs text-muted-foreground text-center">
-                            Question {currentQuestionIndex + 1} of {questions.length}
+            <div className="flex items-center justify-center min-h-screen bg-background p-4">
+                <Card className="w-[90%] max-w-lg shadow-lg border-primary">
+                    <CardHeader className="items-center">
+                         <CheckCircle className="w-12 h-12 text-primary" />
+                        <CardTitle className="text-2xl">Quiz Complete!</CardTitle>
+                        <CardDescription>{result.quizTitle}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="text-center space-y-4">
+                        <p className="text-5xl font-bold">{result.percentage}%</p>
+                        <p className="text-xl text-muted-foreground">
+                            You scored <strong>{result.score}</strong> out of <strong>{result.totalQuestions}</strong>
                         </p>
-                    </div>
-                </CardHeader>
+                         <Progress value={result.percentage} className="w-full" />
+                    </CardContent>
+                    <CardFooter className="flex justify-center">
+                         <Button asChild>
+                            <Link to="/quizzes">
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                Back to Quiz List
+                            </Link>
+                        </Button>
+                    </CardFooter>
+                </Card>
+            </div>
+        );
+    }
 
-                <CardContent className="space-y-6">
-                    {/* Question Text - Check if currentQuestion exists */}
-                    <div className="text-lg font-semibold text-center py-4 min-h-[60px]"> {/* Added min-height */}
-                        {currentQuestion?.questionText ?? 'Loading question...'}
-                    </div>
+    // Quiz In Progress State
+    if (!quiz || !quiz.questions.length) {
+         return (
+             <div className="flex items-center justify-center min-h-screen bg-background">
+                <p>Quiz data is missing or this quiz has no questions.</p>
+            </div>
+         );
+    }
 
-                    {/* Options - Check if currentQuestion exists */}
-                    <RadioGroup
-                        value={selectedOptionId}
-                        onValueChange={handleOptionChange} // Update selection state
-                        className="space-y-3"
-                        key={currentQuestion?._id ?? currentQuestionIndex} // Use index as fallback key
-                    >
-                        {currentQuestion?.options.map((option, index) => (
-                            <Label
-                                key={option._id || index} // Use option._id if available from backend, otherwise index
-                                htmlFor={`q${currentQuestionIndex}-opt${index}`}
-                                className={cn(
-                                    "flex items-center space-x-3 border rounded-md p-3 cursor-pointer transition-colors hover:bg-muted/60",
-                                    selectedOptionId === option._id ? 'bg-muted border-primary ring-1 ring-primary' : 'border-input' // Use border-input for default
-                                )}
-                            >
-                                <RadioGroupItem value={option._id} id={`q${currentQuestionIndex}-opt${index}`} />
-                                <span>{option.text}</span>
-                            </Label>
-                        ))}
-                         {/* Render skeleton options if question exists but options haven't loaded? Unlikely with Promise.all */}
-                        {!currentQuestion?.options && isLoading && (
-                            <>
-                                <Skeleton className="h-12 w-full rounded-md" />
-                                <Skeleton className="h-12 w-full rounded-md" />
-                            </>
-                        )}
-                    </RadioGroup>
+    const currentQuestion = quiz.questions[currentQuestionIndex];
+    const isAnswerSelected = !!selectedAnswers[currentQuestion._id];
+    const progressPercentage = ((currentQuestionIndex + 1) / quiz.questions.length) * 100;
+    const isLastQuestion = currentQuestionIndex === quiz.questions.length - 1;
 
-                    {/* Navigation Buttons */}
-                    <div className="flex justify-between items-center pt-4">
-                         <Button
+
+    return (
+        <>
+            <div className="flex items-center justify-center min-h-screen bg-background p-4">
+                <Card className="w-[90%] max-w-2xl shadow-lg">
+                    <CardHeader>
+                        <CardTitle className="truncate">{quiz.title}</CardTitle>
+                        <CardDescription>
+                            Question {currentQuestionIndex + 1} of {quiz.questions.length}
+                        </CardDescription>
+                         <Progress value={progressPercentage} className="w-full mt-2" />
+                    </CardHeader>
+
+                    {/* *** THIS IS THE FIX for the "select all" bug *** */}
+                    {/* It uses RadioGroup for single selection */}
+                    <CardContent>
+  <h3 className="text-xl font-semibold mb-4">
+    {currentQuestion.questionText}
+  </h3>
+
+  <RadioGroup
+    value={selectedAnswers[currentQuestion._id] || ""}
+    onValueChange={(value) =>
+      handleAnswerChange(currentQuestion._id, value)
+    }
+    className="space-y-2"
+  >
+    {currentQuestion.options.map((option, index) => (
+      <div
+        key={index}
+        className="flex items-center space-x-2 p-3 bg-muted/50 rounded-md hover:bg-muted transition-colors"
+      >
+        <RadioGroupItem
+          value={option}
+          id={`${currentQuestion._id}-${index}`}
+        />
+        <Label
+          htmlFor={`${currentQuestion._id}-${index}`}
+          className="flex-1 cursor-pointer"
+        >
+          {option}
+        </Label>
+      </div>
+    ))}
+  </RadioGroup>
+</CardContent>
+
+                    <CardFooter className="flex justify-between">
+                        <Button 
                             variant="outline"
-                            onClick={handlePreviousQuestion}
+                            onClick={handleBack}
                             disabled={currentQuestionIndex === 0 || isSubmitting}
                         >
-                            Previous
+                            Back
                         </Button>
 
-                         {currentQuestionIndex === questions.length - 1 ? (
-                            // Show Submit button on the last question
+                        {isLastQuestion ? (
                             <Button
-                                onClick={handleSubmitQuiz}
-                                disabled={isSubmitting || !selectedOptionId} // Disable if no option selected on last Q
                                 className="bg-green-600 hover:bg-green-700"
+                                onClick={() => setIsConfirmOpen(true)} // Open confirmation dialog
+                                disabled={!isAnswerSelected || isSubmitting}
                             >
                                 {isSubmitting ? "Submitting..." : "Submit Quiz"}
                             </Button>
-                         ) : (
-                             // Show Next button
+                        ) : (
                             <Button
-                                onClick={handleNextQuestion}
-                                disabled={isSubmitting || !selectedOptionId} // Disable if no option selected
+                                onClick={handleNext}
+                                disabled={!isAnswerSelected || isSubmitting}
                             >
                                 Next
                             </Button>
-                         )}
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
+                        )}
+                    </CardFooter>
+                </Card>
+            </div>
+
+            {/* Confirmation Dialog */}
+             <AlertDialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                    <AlertDialogTitle>Are you sure you want to submit?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        You cannot change your answers after submitting.
+                    </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleSubmit}>Submit</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     );
 };
 

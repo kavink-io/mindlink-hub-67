@@ -186,7 +186,7 @@ const QuizList = () => {
 
                                          {/* Start Quiz Button (visible to all logged in users) */}
                                          <Button asChild>
-                                            <Link to={`/quizzes/${quiz._id}/take`}>
+                                            <Link to={`/quiz/${quiz._id}`}>
                                                 <BrainCircuit className="mr-2 h-4 w-4" /> Start Quiz
                                             </Link>
                                         </Button>

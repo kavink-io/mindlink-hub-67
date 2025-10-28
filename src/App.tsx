@@ -18,6 +18,7 @@ import RelaxRoom from "./pages/RelaxRoom";
 import CreateQuiz from "./pages/CreateQuiz";
 import QuizList from "./pages/QuizList";
 import TakeQuiz from "./pages/TakeQuiz";
+import ViewQuizResults from "./pages/ViewQuizResults";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,8 +43,8 @@ const App = () => (
           <Route path="/relax" element={<RelaxRoom />} />
           <Route path="/quiz/create" element={<CreateQuiz />} />
           <Route path="/quizzes" element={<QuizList />} />{/* <-- Add route */}
-          <Route path="/quizzes/:id/take" element={<TakeQuiz />} />
-          {/* <Route path="/quizzes/:id/take" element={<TakeQuiz />} /> */}
+          <Route path="/quiz/:id" element={<TakeQuiz />} />
+          <Route path="/quiz/results" element={<ViewQuizResults />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

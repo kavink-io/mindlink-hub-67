@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Users, MessageSquare, FileUp, ClipboardCheck, LogOut, Download, File, Trash2 } from "lucide-react"; // Added Download, File, Trash2 icons
+import { FileText, Users, MessageSquare, FileUp, ClipboardCheck, LogOut, Download, File, Trash2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -301,18 +301,18 @@ const TeacherDashboard = () => {
                         </Card>
                     </Link>
 
-                     {/* Placeholder Link for Viewing/Answering Questions */}
-                    <Link to="#" className="block">
-                        <Card className="h-full shadow-soft hover:shadow-hover transition-all hover:scale-105 cursor-pointer border-2 border-primary">
-                        <CardHeader>
-                            <MessageSquare className="w-12 h-12 mb-4 text-primary" />
-                            <CardTitle>Answer Questions</CardTitle>
-                            <CardDescription>
-                            Help students with their queries
-                            </CardDescription>
-                        </CardHeader>
-                        </Card>
-                    </Link>
+                    {/* Link to View Quiz Results */}
+                <Link to="/quiz/results" className="block">
+                    <Card className="h-full shadow-soft hover:shadow-hover transition-all hover:scale-105 cursor-pointer border-2 border-primary">
+                    <CardHeader>
+                        <Users className="w-12 h-12 mb-4 text-primary" />
+                        <CardTitle>View Quiz Results</CardTitle>
+                        <CardDescription>
+                        See student scores and participation
+                        </CardDescription>
+                    </CardHeader>
+                    </Card>
+                </Link>
                 </div>
 
                 {/* Shared Notes List - UPDATED */}
